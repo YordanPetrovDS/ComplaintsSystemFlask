@@ -1,6 +1,8 @@
 from flask import Flask
 from flask_migrate import Migrate
 from flask_restful import Api
+from psycopg2.errorcodes import UNIQUE_VIOLATION
+from werkzeug.exceptions import BadRequest, InternalServerError
 
 from config import DevApplication
 from db import db
@@ -14,6 +16,19 @@ migrate = Migrate(app, db)
 api = Api(app)
 
 [api.add_resource(*r) for r in routes]
+
+
+@app.after_request
+def close_request(response):
+    try:
+        db.session.commit()
+    except Exception as ex:
+        if ex.orig.pgcode == UNIQUE_VIOLATION:
+            raise BadRequest("Please login")
+        else:
+            InternalServerError("Server is an unavailable. Please try again later")
+    return response
+
 
 if __name__ == "__main__":
     app.run()
