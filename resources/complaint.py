@@ -9,6 +9,7 @@ from util.decorators import permission_required, validate_schema
 
 
 class ListCreateComplaint(Resource):
+    @auth.login_required
     def get(self):
         complaints = ComplaintManager.get_all()
         schema = ComplaintCreateResponseSchema()
@@ -37,7 +38,7 @@ class CompalaintDetail(Resource):
         return schema.dump(updated_coplaint)
 
     @auth.login_required
-    # @permission_required(RoleType.admin)
+    @permission_required(RoleType.admin)
     def delete(self, id_):
         ComplaintManager.delete(id_)
         return {"message": "Success"}, 204
@@ -45,8 +46,8 @@ class CompalaintDetail(Resource):
 
 class ApproveComplaint(Resource):
     @auth.login_required
-    # @permission_required(RoleType.approver)
-    def get(self, id_):
+    @permission_required(RoleType.approver)
+    def put(self, id_):
         complaint = ComplaintManager.approve(id_)
         schema = ComplaintCreateResponseSchema()
         return schema.dump(complaint)
@@ -54,8 +55,8 @@ class ApproveComplaint(Resource):
 
 class RejectComplaint(Resource):
     @auth.login_required
-    # @permission_required(RoleType.approver)
-    def get(self, id_):
+    @permission_required(RoleType.approver)
+    def put(self, id_):
         complaint = ComplaintManager.reject(id_)
         schema = ComplaintCreateResponseSchema()
         return schema.dump(complaint)

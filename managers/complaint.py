@@ -1,18 +1,30 @@
+import os
+import uuid
+
+from constants import TEMP_FILE_FOLDER
 from db import db
 from models.complaint import ComplaintModel
-from models.enums import State
+from models.enums import RoleType, State
 from models.transaction import TransactionModel
+from services.s3 import S3Service
 from services.wise import WiseService
+from util.helpers import decode_photo
 from werkzeug.exceptions import NotFound
 
 from managers.auth import auth
 
 wise = WiseService()
+s3 = S3Service()
 
 
 class ComplaintManager:
     @staticmethod
     def get_all():
+        current_user = auth.current_user()
+        if current_user == RoleType.complainer:
+            return ComplaintModel.query.filter_by(complaint_id=current_user.id).all()
+        elif current_user == RoleType.approver:
+            return ComplaintModel.query.filter_by(status=State.approved).all()
         return ComplaintModel.query.all()
 
     @staticmethod
@@ -33,15 +45,36 @@ class ComplaintManager:
 
     @staticmethod
     def create(complaint_data, complainer):
+        """
+        This function decode the base64 encoded string from client and
+        upload the photo to s3 aws service.
+        Flushes to database with newly created complaint and issue
+        a new payment transaction in Pending state in the payment provider
+        """
+        photo_name = f"{str(uuid.uuid4())}.{complaint_data.pop('photo_extension')}"
+        path = os.path.join(TEMP_FILE_FOLDER, photo_name)
+        try:
+            decode_photo(complaint_data.pop("photo"), path)
+            photo_url = s3.upload_photo(path, photo_name)
+        except Exception as ex:
+            raise ex
+        finally:
+            os.remove(path)
+
+        complaint_data["photo_url"] = photo_url
         complaint_data["complainer_id"] = complainer.id
         amount = complaint_data["amount"]
         full_name = f"{complainer.first_name} {complainer.last_name}"
         iban = complainer.iban
-
         complaint = ComplaintModel(**complaint_data)
         db.session.add(complaint)
         db.session.flush()
-        ComplaintManager.issue_transaction(amount, full_name, iban, complaint.id)
+
+        try:
+            ComplaintManager.issue_transaction(amount, full_name, iban, complaint.id)
+        except Exception as ex:
+            s3.delete_photo(photo_name)
+            raise ex
 
         return complaint
 

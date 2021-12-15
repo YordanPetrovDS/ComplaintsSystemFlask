@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_restful import Api
 from psycopg2.errorcodes import UNIQUE_VIOLATION
@@ -13,6 +14,7 @@ app.config.from_object(DevApplication)
 db.init_app(app)
 
 migrate = Migrate(app, db)
+CORS(app)
 api = Api(app)
 
 [api.add_resource(*r) for r in routes]
